@@ -43,6 +43,7 @@ export async function action({ request }: Route.LoaderArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
+  // TODO: don't use a "name" to identify an entity, use "id" instead
   const selectedName = url.searchParams.get("pokemon");
 
   //lista principal
@@ -74,7 +75,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <Form style={{ marginLeft: "10px" }}>
           <p>
             <input type="text" />
-
+            {/* TODO: use a "types" array instead */}
             <select name="type">
               <option value="fire">Fire</option>
               <option value="water">Water</option>
@@ -84,6 +85,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </p>
         </Form>
       </div>
+      {/* TODO: we don't need to set up navigation for this application */}
       <nav>
         <Link to="/selected">Ver seleccionados</Link>
       </nav>
@@ -126,7 +128,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             })}
           </ul>
         )}
-
+        {/* TODO: I expect to see a list of selected pokemons, not only one */}
         {selectedPokemon && (
           <section
             style={{
