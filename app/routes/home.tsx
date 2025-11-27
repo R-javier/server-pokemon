@@ -83,7 +83,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   const selectedType = url.searchParams.get("type");
   const searchName = url.searchParams.get("search")?.toLocaleLowerCase() || "";
   //lista principal
-  const response = await fetch("https://pokeapi.co/api/v2/pokemon?limit=151");
+  const response = await fetch("https://pokeapi.co/api/v2/pokemon?limit=10");
   const data = await response.json();
   const pokemons = await Promise.all(
     data.results.map(async (pokemon: UndetailedPokemonSchema) => {
