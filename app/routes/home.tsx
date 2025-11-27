@@ -1,4 +1,4 @@
-import { Form, Link, redirect } from "react-router";
+import { Form, redirect } from "react-router";
 import * as v from "valibot";
 import type { Route } from "./+types/home";
 
@@ -24,29 +24,66 @@ const PokemonDetailSchema = v.object({
   ),
 });
 
+type PokemonDetail = v.InferOutput<typeof PokemonDetailSchema>;
+
+const INTENT = {
+  SET_NAME: "set_name",
+  SET_DELETE: "set_delete",
+};
+
 export async function action({ request }: Route.LoaderArgs) {
   //console.log("request action", request);
   const formData = await request.formData();
+  const intent = formData.get("intent");
   const url = new URL(request.url);
 
-  const removeName = formData.get("remove");
-  if (removeName) {
-    url.searchParams.delete("pokemon");
+  switch (intent) {
+    case INTENT.SET_NAME: {
+      const name = formData.get("name")?.toString() || "";
+      const type = formData.get("type")?.toString() || "";
+
+      if (name) url.searchParams.set("search", name);
+      else url.searchParams.delete("search");
+
+      if (type) url.searchParams.set("type", type);
+      else url.searchParams.delete("type");
+
+      return redirect(url.toString());
+    }
+    case INTENT.SET_DELETE: {
+      url.searchParams.delete("search");
+      url.searchParams.delete("type");
+      return redirect(url.origin + url.pathname);
+    }
+  }
+  const removeId = formData.get("remove");
+  if (removeId) {
+    const currentIds = url.searchParams.get("pokemon")?.split(",") || [];
+    const newIds = currentIds.filter((id) => id !== removeId);
+    if (newIds.length > 0) {
+      url.searchParams.set("pokemon", newIds.join(","));
+    } else {
+      url.searchParams.delete("pokemon");
+    }
     return redirect(url.toString());
   }
 
-  const namePokemon = v.parse(v.string(), formData.get("pokemon"));
-  const pokemon = JSON.parse(namePokemon);
-  url.searchParams.set("pokemon", pokemon.name);
+  const pokemonId = v.parse(v.string(), formData.get("pokemon"));
+  const currentIds = url.searchParams.get("pokemon")?.split(",") || [];
+  if (!currentIds.includes(pokemonId)) {
+    currentIds.push(pokemonId);
+  }
+  url.searchParams.set("pokemon", currentIds.join(","));
   return redirect(url.toString());
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  const selectedName = url.searchParams.get("pokemon");
-
+  const selectedIds = url.searchParams.get("pokemon")?.split(",") || [];
+  const selectedType = url.searchParams.get("type");
+  const searchName = url.searchParams.get("search")?.toLocaleLowerCase() || "";
   //lista principal
-  const response = await fetch("https://pokeapi.co/api/v2/pokemon?limit=5");
+  const response = await fetch("https://pokeapi.co/api/v2/pokemon?limit=151");
   const data = await response.json();
   const pokemons = await Promise.all(
     data.results.map(async (pokemon: UndetailedPokemonSchema) => {
@@ -56,118 +93,174 @@ export async function loader({ request }: Route.LoaderArgs) {
     }),
   );
 
-  let selectedPokemon = null;
-  if (selectedName) {
-    const found = pokemons.find((p) => p.name === selectedName);
-    if (found) selectedPokemon = found;
-  }
+  const allTypes = Array.from(
+    new Set(
+      pokemons.flatMap((pokemon) =>
+        pokemon.types.map(
+          (_type: PokemonDetail["types"][number]) => _type.type.name,
+        ),
+      ),
+    ),
+  );
 
-  return { pokemons, selectedPokemon };
+  const filteredPokemons = pokemons.filter((pokemon) => {
+    const matchesType = selectedType
+      ? pokemon.types.some(
+          (_type: PokemonDetail["types"][number]) =>
+            _type.type.name === selectedType,
+        )
+      : true;
+
+    const matchesName = searchName
+      ? pokemon.name.toLowerCase().includes(searchName)
+      : true;
+
+    return matchesType && matchesName;
+  });
+
+  const selectedPokemons = await Promise.all(
+    selectedIds.map(async (id) => {
+      const found = pokemons.find((p) => String(p.id) === id);
+      if (found) return found;
+      const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
+      const fullData = await response.json();
+      return v.parse(PokemonDetailSchema, fullData);
+    }),
+  );
+
+  return { pokemons, filteredPokemons, selectedPokemons, types: allTypes };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { pokemons, selectedPokemon } = loaderData;
+  const { pokemons, selectedPokemons } = loaderData;
   return (
     <main style={{ padding: "20px" }}>
       <div style={{ marginBottom: "20px" }}>
         <h1>Pokedex</h1>
-        <Form style={{ marginLeft: "10px" }}>
+        <Form method="post" style={{ marginLeft: "10px" }}>
           <p>
-            <input type="text" />
+            <input
+              type="text"
+              name="name"
+              placeholder="Nombre"
+              defaultValue=""
+            />
 
-            <select name="type">
-              <option value="fire">Fire</option>
-              <option value="water">Water</option>
-              <option value="grass">Grass</option>
+            <select name="type" defaultValue="">
+              <option value="">Todos</option>
+              {loaderData.types.map((type: string) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
             </select>
-            <button type="submit">Filtrar</button>
+            <button type="submit" name="intent" value={INTENT.SET_NAME}>
+              Filtrar
+            </button>
+            <button type="submit" name="intent" value={INTENT.SET_DELETE}>
+              Limpiar
+            </button>
           </p>
         </Form>
       </div>
-      <nav>
-        <Link to="/selected">Ver seleccionados</Link>
-      </nav>
 
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
+          alignItems: "flex-start",
+          gap: "20px",
         }}
       >
         {pokemons && (
           <ul>
-            {pokemons.map((pokemon, index) => {
-              const id = `index-${index}`;
-              return (
-                <li key={id}>
-                  {pokemon.name}
-                  <Form method="post">
-                    <input
-                      type="hidden"
-                      name="pokemon"
-                      value={JSON.stringify(pokemon)}
-                    />
-                    <button
-                      type="submit"
-                      style={{
-                        backgroundColor: "red",
-                        cursor: "pointer",
-                        borderRadius: "8px",
-                        color: "white",
-                        padding: "10px",
-                      }}
-                    >
-                      add
-                    </button>
-                  </Form>
-                </li>
-              );
-            })}
+            {loaderData.filteredPokemons.map((pokemon) => (
+              <li key={pokemon.id}>
+                {pokemon.name}
+                <Form method="post">
+                  <input type="hidden" name="pokemon" value={pokemon.id} />
+                  <button
+                    type="submit"
+                    style={{ backgroundColor: "red", color: "white" }}
+                  >
+                    add
+                  </button>
+                </Form>
+              </li>
+            ))}
           </ul>
         )}
 
-        {selectedPokemon && (
+        {selectedPokemons.length > 0 && (
           <section
             style={{
               padding: "20px",
+              gap: "20px",
+              top: "20px",
+              backgroundColor: "#222",
+              borderRadius: "8px",
+              width: "250px",
             }}
           >
-            <h3>Pokémon Seleccionado</h3>
-            <div>
-              <img
-                src={selectedPokemon.sprites.front_default}
-                alt={selectedPokemon.name}
-              />
-              <p>{selectedPokemon.name}</p>
-              <p>
-                {selectedPokemon.types
-                  .map(
-                    (_type: { slot: number; type: { name: string } }) =>
-                      _type.type.name,
-                  )
-                  .join(", ")}
-              </p>
-            </div>
-
-            <Form method="post" style={{ marginTop: "10px" }}>
-              <input type="hidden" name="remove" value={selectedPokemon.name} />
-              <button
-                type="submit"
-                style={{
-                  backgroundColor: "Ff0000",
-                  cursor: "pointer",
-                  borderRadius: "8px",
-                  color: "white",
-                  padding: "10px",
-                }}
-              >
-                Remove
-              </button>
-            </Form>
+            <h3>Pokémon Seleccionados</h3>
+            <ul>
+              {loaderData.selectedPokemons.map((pokemon) => (
+                <li key={pokemon.id}>
+                  <img src={pokemon.sprites.front_default} alt={pokemon.name} />
+                  <p>{pokemon.name}</p>
+                  <p>
+                    {pokemon.types
+                      .map(
+                        (_type: PokemonDetail["types"][number]) =>
+                          _type.type.name,
+                      )
+                      .join(", ")}
+                  </p>
+                  <Form method="post">
+                    <input type="hidden" name="remove" value={pokemon.id} />
+                    <button
+                      type="submit"
+                      style={{ backgroundColor: "red", color: "white" }}
+                    >
+                      Remove
+                    </button>
+                  </Form>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
       </div>
     </main>
   );
 }
+
+// const INTENT ={
+//   SET_NAME: "set_name",
+// };
+
+// export async function action({request} : Route.LoaderArgs) {
+//   const formData = await request.formData()
+//   const intent = formData.get("intent")
+
+//   switch(intent){
+//     case INTENT.SET_NAME:{
+//       const name = v.parse(v.string(), formData.get("name"))
+//       const url = new URL(request.url);
+//       url.searchParams.set("name", name);
+//       return redirect(url.toString())
+//     }
+//   }
+// }
+
+// <Form method="POST">
+//   <p>
+//     <label htmlFor="name">Name</label>
+//     <input id="name" name="name" />
+//     <button
+//     type="submit"
+//     name="intent"
+//     value={ACTION.SET_NAME}
+//     >change Name</button>
+//   </p>
+// </Form>
