@@ -234,33 +234,3 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     </main>
   );
 }
-
-// const INTENT ={
-//   SET_NAME: "set_name",
-// };
-
-// export async function action({request} : Route.LoaderArgs) {
-//   const formData = await request.formData()
-//   const intent = formData.get("intent")
-
-//   switch(intent){
-//     case INTENT.SET_NAME:{
-//       const name = v.parse(v.string(), formData.get("name"))
-//       const url = new URL(request.url);
-//       url.searchParams.set("name", name);
-//       return redirect(url.toString())
-//     }
-//   }
-// }
-
-// <Form method="POST">
-//   <p>
-//     <label htmlFor="name">Name</label>
-//     <input id="name" name="name" />
-//     <button
-//     type="submit"
-//     name="intent"
-//     value={ACTION.SET_NAME}
-//     >change Name</button>
-//   </p>
-// </Form>
