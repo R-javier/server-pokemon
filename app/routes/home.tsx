@@ -28,7 +28,7 @@ type PokemonDetail = v.InferOutput<typeof PokemonDetailSchema>;
 
 const INTENT = {
   SET_NAME: "set_name",
-  SET_DELETE: "set_delete",
+  SET_DELETE: "set_delete", // TODO: delete what?
 };
 
 export async function action({ request }: Route.LoaderArgs) {
@@ -39,14 +39,27 @@ export async function action({ request }: Route.LoaderArgs) {
 
   switch (intent) {
     case INTENT.SET_NAME: {
-      const name = formData.get("name")?.toString() || "";
+      // NOTE: don't set defaults like that. Take adventage of
+      // the "null" value to conceptually determine:
+      // "does 'name' form data exist?"
+      const name = formData.get("name");
       const type = formData.get("type")?.toString() || "";
 
-      if (name) url.searchParams.set("search", name);
-      else url.searchParams.delete("search");
+      if (name) {
+        // if exists
+        // NOTE: always open braces
+        const validatedName = v.parse(v.string(), name);
+        url.searchParams.set("search", validatedName);
+      } else {
+        // if it doesn't
+        url.searchParams.delete("search");
+      }
 
-      if (type) url.searchParams.set("type", type);
-      else url.searchParams.delete("type");
+      if (type) {
+        url.searchParams.set("type", type);
+      } else {
+        url.searchParams.delete("type");
+      }
 
       return redirect(url.toString());
     }
@@ -56,6 +69,8 @@ export async function action({ request }: Route.LoaderArgs) {
       return redirect(url.origin + url.pathname);
     }
   }
+  // TODO: there shouldn't be any code that's outside of a INTENT code block.
+  // In other words, all code should be inside each "case INTENT: {//here}"
   const removeId = formData.get("remove");
   if (removeId) {
     const currentIds = url.searchParams.get("pokemon")?.split(",") || [];
@@ -118,6 +133,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     return matchesType && matchesName;
   });
 
+  // NOTE: very nice, you first filter the pokemons, then search for the detail
+  // information. This means that you will get a faster response from the API
   const selectedPokemons = await Promise.all(
     selectedIds.map(async (id) => {
       const found = pokemons.find((p) => String(p.id) === id);
