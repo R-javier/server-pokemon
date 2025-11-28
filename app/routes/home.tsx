@@ -28,53 +28,64 @@ type PokemonDetail = v.InferOutput<typeof PokemonDetailSchema>;
 
 const INTENT = {
   SET_NAME: "set_name",
-  SET_DELETE: "set_delete",
+  CLEAR_FILTERS: "clear_filters",
+  ADD_POKEMON: "add_pokemon",
+  REMOVE_POKEMON: "remove_pokemon",
 };
 
 export async function action({ request }: Route.LoaderArgs) {
   //console.log("request action", request);
   const formData = await request.formData();
-  const intent = formData.get("intent");
+  const intent = formData.get("intent")?.toString();
   const url = new URL(request.url);
 
   switch (intent) {
     case INTENT.SET_NAME: {
-      const name = formData.get("name")?.toString() || "";
-      const type = formData.get("type")?.toString() || "";
+      const name = formData.get("name");
+      const type = formData.get("type");
 
-      if (name) url.searchParams.set("search", name);
-      else url.searchParams.delete("search");
+      if (name) {
+        url.searchParams.set("search", name.toString());
+      } else {
+        url.searchParams.delete("search");
+      }
 
-      if (type) url.searchParams.set("type", type);
-      else url.searchParams.delete("type");
+      if (type) {
+        url.searchParams.set("type", type.toString());
+      } else {
+        url.searchParams.delete("type");
+      }
 
       return redirect(url.toString());
     }
-    case INTENT.SET_DELETE: {
+    case INTENT.CLEAR_FILTERS: {
       url.searchParams.delete("search");
       url.searchParams.delete("type");
       return redirect(url.origin + url.pathname);
     }
-  }
-  const removeId = formData.get("remove");
-  if (removeId) {
-    const currentIds = url.searchParams.get("pokemon")?.split(",") || [];
-    const newIds = currentIds.filter((id) => id !== removeId);
-    if (newIds.length > 0) {
-      url.searchParams.set("pokemon", newIds.join(","));
-    } else {
-      url.searchParams.delete("pokemon");
-    }
-    return redirect(url.toString());
-  }
 
-  const pokemonId = v.parse(v.string(), formData.get("pokemon"));
-  const currentIds = url.searchParams.get("pokemon")?.split(",") || [];
-  if (!currentIds.includes(pokemonId)) {
-    currentIds.push(pokemonId);
+    case INTENT.REMOVE_POKEMON: {
+      const removeId = formData.get("remove");
+      if (removeId) {
+        const currentIds = url.searchParams.get("pokemon")?.split(",") || [];
+        const newIds = currentIds.filter((id) => id !== removeId);
+        newIds.length > 0
+          ? url.searchParams.set("pokemon", newIds.join(","))
+          : url.searchParams.delete("pokemon");
+      }
+      return redirect(url.toString());
+    }
+
+    case INTENT.ADD_POKEMON: {
+      const pokemonId = v.parse(v.string(), formData.get("pokemon"));
+      const currentIds = url.searchParams.get("pokemon")?.split(",") || [];
+      if (!currentIds.includes(pokemonId)) {
+        currentIds.push(pokemonId);
+      }
+      url.searchParams.set("pokemon", currentIds.join(","));
+      return redirect(url.toString());
+    }
   }
-  url.searchParams.set("pokemon", currentIds.join(","));
-  return redirect(url.toString());
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -157,7 +168,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
             <button type="submit" name="intent" value={INTENT.SET_NAME}>
               Filtrar
             </button>
-            <button type="submit" name="intent" value={INTENT.SET_DELETE}>
+            <button type="submit" name="intent" value={INTENT.CLEAR_FILTERS}>
               Limpiar
             </button>
           </p>
@@ -182,6 +193,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                   <button
                     type="submit"
                     style={{ backgroundColor: "red", color: "white" }}
+                    name="intent"
+                    value={INTENT.ADD_POKEMON}
                   >
                     add
                   </button>
@@ -221,6 +234,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     <button
                       type="submit"
                       style={{ backgroundColor: "red", color: "white" }}
+                      name="intent"
+                      value={INTENT.REMOVE_POKEMON}
                     >
                       Remove
                     </button>
